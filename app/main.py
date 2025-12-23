@@ -3,9 +3,9 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 import time
 
-from app import redis_client
+from app.redis_client import redis_client
 
-from .database import SessionLocal, engine
+from .database import Base, SessionLocal, engine
 from .models import Base, URL
 from .schemas import URLCreate, URLResponse
 from .utils import encode_base62
@@ -34,18 +34,18 @@ def get_db():
 RATE_LIMIT = 5
 TIME_WINDOW = 60
 
-def check_rate_limit(ip: str):
+def check_rate_limit(ip: str) -> bool:
+    if not redis_client:
+        return True  # allow if Redis not configured
+
     key = f"rate_limit:{ip}"
-    current_count = redis_client.get(key)
+    current = redis_client.get(key)
 
-    if current_count is None:
-        redis_client.setex(key, TIME_WINDOW, 1)
-        return True
-
-    if int(current_count) >= RATE_LIMIT:
+    if current and int(current) >= 5:
         return False
 
     redis_client.incr(key)
+    redis_client.expire(key, 60)
     return True
 
 # -----------------------------
